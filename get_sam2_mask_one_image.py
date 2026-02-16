@@ -63,101 +63,95 @@ predictor = SAM2ImagePredictor(sam2_model)
 #os.makedirs(os.path.join("../../data/peoplesnapshot_arah-format/people_snapshot_public/",subject,model_mask_path),exist_ok=True)
 
 image_path = sys.argv[1]
-output_path = sys.argv[2]
-threshold = int(sys.argv[3])
-kernel_size = int(sys.argv[4])
+output_folder = sys.argv[2]
+overlay_mask_folder = sys.argv[3]
+smpl_folder = sys.argv[4]
+camera_path = sys.argv[5]
+threshold = int(sys.argv[6])
+kernel_size = int(sys.argv[7])
 
 
+os.makedirs(output_folder,exist_ok=True)
 
-start = time.time()
+with open(camera_path, 'rb') as f:
+            camera = pkl.load(f, encoding='latin1')
+K,_,_,distortion = get_KRTD(camera)
+
+
 _,image_name = os.path.split(image_path)
 image = Image.open(image_path)
 image = np.array(image.convert("RGB"))
+image = cv2.undistort(image,K,distortion,None)
+
+mask_path = os.path.join(overlay_mask_folder,image_name[:-3]+"png")
+mask = np.array(Image.open(mask_path))
 
 
-	
-	params = np.load(smpl_file, allow_pickle=True)
-	abs_bone_transforms = np.array(params['abs_bone_transforms'])
-	trans = np.array(params['trans']).reshape([1, 3])
-	bones = K @ (abs_bone_transforms[1][0:3,3] + trans[0])
-	x = int(bones[0] / bones[2])
-	y = int(bones[1] / bones[2])
-	
-	input_point = np.array([[x,y]])
-	input_label = np.array([1])
-	
-	
-	# calculate intersection over union for each mask ref: https://pyimagesearch.com/2016/11/07/intersection-over-union-iou-for-object-detection/
-	boxArea = (x2-x1) * (y2-y1)
-	predictor.set_image(image)
-	masks, scores, logits = predictor.predict(
-	point_coords=input_point,
-	point_labels=input_label,
-	multimask_output=True,
-       	)
-	sorted_ind = np.argsort(scores)[::-1]
-	masks = masks[sorted_ind]
-	scores = scores[sorted_ind]
-	logits = logits[sorted_ind]
-	number_of_masks, w , h = masks.shape
-	iou = []
-	for i in range(number_of_masks):
-		mask_new = np.where(masks[i])
-		try:
-			y1_tmp, y2_tmp = mask_new[1].min(), mask_new[1].max() + 1
-			x1_tmp, x2_tmp = mask_new[0].min(), mask_new[0].max() + 1
-		
-			xA = max(x1_tmp,x1)
-			yA = max(y1_tmp,y1)
-			xB = min(x2_tmp,x2)
-			yB = min(y2_tmp,y2)
+smpl_file = os.path.join(smpl_folder,image_name[:-4]+".npz")
+## load params
+print(smpl_file)
+params = np.load(smpl_file, allow_pickle=True)
+abs_bone_transforms = np.array(params['abs_bone_transforms'])
+trans = np.array(params['trans']).reshape([1, 3])
+bones = K @ (abs_bone_transforms[1][0:3,3] + trans[0])
+x = int(bones[0] / bones[2])
+y = int(bones[1] / bones[2])
 
-			interArea = max(0, xB-xA+1)* max(0,yB-yA+1)
-			boxTmpArea = (x2_tmp - x1_tmp) * (y2_tmp - y1_tmp)
-			iou_score = interArea/ float(boxTmpArea +  boxArea - interArea)
-			iou.append(iou_score)
-			#if(0.4 * boxArea <= boxTmpArea and boxTmpArea <= 1.6 * boxArea):
-			#	iou.append(iou_score)
-			#else:
-			#	iou.append(0)
-		except:
-			iou.append(0)
-
-	max_value = max(iou)
-	max_index = iou.index(max_value)
-	# looked at the foreground from 2 to 9 and 5, at 6 part of the human got erased 
-	kernel = np.ones((kernel_size, kernel_size), np.uint8)
-	masks[max_index] = cv2.erode(masks[max_index].copy(), kernel)
-	mask_result = np.stack((masks[max_index],masks[max_index],masks[max_index]),axis=2)
-	mask_result = (mask_result * 255).astype(np.uint8)
-	if(image_name == "000000.jpg"):
-		result = Image.fromarray(mask_result)
-		result.save(os.path.join(images_folder[:-len("image/")],"sam2.png"))
-		print(os.path.join(images_folder[:-len("image/")],"sam2.png"))
-
-	# only use the mask their the model is 100% sure
-	w,h,channel = mask_result.shape
-	mask2 = np.zeros((w,h,channel)).astype(np.uint8)
-	mask2[mask_result>=threshold] = 255
-	mask_result = mask2
-	mask_out_path = os.path.join(output_folder,image_name)
-	result = Image.fromarray(mask_result)
-	print(mask_out_path[:-4]+".png")
-	print("score: " + str(scores[max_index]) + "iou score:" +str(iou[max_index]))
-	result.save(mask_out_path[:-4]+".png")
-
-end = time.time()
-print("Time to get the masks: "+str(end-start))
-
-#count = 0
-#for i in masks:
- #   i = np.stack((i,i,i),axis=2)
-  #  i = (i * 255).astype(np.uint8)
-  #  count = count +1 
-  #  result = Image.fromarray(mask_result)
-  #  result.save("mask_"+str(count)+".jpg")
+# compute box similiar to https://github.com/mikeqzy/3dgs-avatar-release/blob/main/train.py
+#mask[mask == 255] = 0
+mask_new = np.where(mask)
+y1, y2 = mask_new[1].min(), mask_new[1].max() + 1
+x1, x2 = mask_new[0].min(), mask_new[0].max() + 1
+mask[x1:x2,y1:y2,:] = 100
+input_point = np.array([[x,y]])
+input_label = np.array([1])
 
 
+# calculate intersection over union for each mask ref: https://pyimagesearch.com/2016/11/07/intersection-over-union-iou-for-object-detection/
+boxArea = (x2-x1) * (y2-y1)
+predictor.set_image(image)
+masks, scores, logits = predictor.predict(
+point_coords=input_point,
+point_labels=input_label,
+multimask_output=True,
+)
+sorted_ind = np.argsort(scores)[::-1]
+masks = masks[sorted_ind]
+scores = scores[sorted_ind]
+logits = logits[sorted_ind]
+number_of_masks, w , h = masks.shape
+iou = []
+for i in range(number_of_masks):
+        mask_new = np.where(masks[i])
+        try:
+                y1_tmp, y2_tmp = mask_new[1].min(), mask_new[1].max() + 1
+                x1_tmp, x2_tmp = mask_new[0].min(), mask_new[0].max() + 1
+
+                xA = max(x1_tmp,x1)
+                yA = max(y1_tmp,y1)
+                xB = min(x2_tmp,x2)
+                yB = min(y2_tmp,y2)
+
+                interArea = max(0, xB-xA+1)* max(0,yB-yA+1)
+                boxTmpArea = (x2_tmp - x1_tmp) * (y2_tmp - y1_tmp)
+                iou_score = interArea/ float(boxTmpArea +  boxArea - interArea)
+                iou.append(iou_score)
+                #if(0.4 * boxArea <= boxTmpArea and boxTmpArea <= 1.6 * boxArea):
+                #       iou.append(iou_score)
+                #else:
+                #       iou.append(0)
+        except:
+                iou.append(0)
+
+max_value = max(iou)
+max_index = iou.index(max_value)
+kernel = np.ones((kernel_size, kernel_size), np.uint8)
+masks[max_index] = cv2.erode(masks[max_index].copy(), kernel)
+mask_result = np.stack((masks[max_index],masks[max_index],masks[max_index]),axis=2)
+mask_result = (mask_result * 255).astype(np.uint8)
+result = Image.fromarray(mask_result)
+result.save(os.path.join(output_folder,"sam2.png"))
+print(os.path.join(output_folder,"sam2.png"))
 
 
 
