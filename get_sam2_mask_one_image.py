@@ -83,7 +83,7 @@ image = Image.open(image_path)
 image = np.array(image.convert("RGB"))
 image = cv2.undistort(image,K,distortion,None)
 
-mask_path = os.path.join(overlay_mask_folder,image_name[:-3]+"png")
+mask_path = os.path.join(overlay_mask_folder,image_name[:-3]+"jpg")
 mask = np.array(Image.open(mask_path))
 
 
