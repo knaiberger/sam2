@@ -67,8 +67,7 @@ output_folder = sys.argv[2]
 overlay_mask_folder = sys.argv[3]
 smpl_folder = sys.argv[4]
 camera_path = sys.argv[5]
-threshold = int(sys.argv[6])
-kernel_size = int(sys.argv[7])
+kernel_size = int(sys.argv[6])
 
 
 os.makedirs(output_folder,exist_ok=True)
