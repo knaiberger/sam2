@@ -86,7 +86,11 @@ for image_path in images:
 	#mask_path = os.path.join("../CameraHMR/output/",subject,"first/mask/",image_name)
 	#mask_path = "../CameraHMR/test/output/male-3-casual/first/mask/000000.jpg"
 	mask_path = os.path.join(overlay_mask_folder,image_name[:-3]+"png")
-	mask = np.array(Image.open(mask_path))
+        if(os.path.exists(mask_path)):
+	    mask = np.array(Image.open(mask_path))
+        else:
+            mask_path = mask_path[:-3]+"jpg"
+            mask = np.array(Image.open(mask_path))
 	
 	smpl_file = os.path.join(smpl_folder,image_name[:-4]+".npz")
 	## load params
